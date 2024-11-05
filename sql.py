@@ -1,43 +1,22 @@
 "SQLite Widget"
 
-
 # Standard library imports
 from __future__ import annotations
-from typing import TYPE_CHECKING, Sequence, Any
-if TYPE_CHECKING:
-    # from textual.app import ComposeResult
-    # from textual.worker import Worker
-    pass
+from typing import Sequence, Any
 
 from contextlib import contextmanager
-# import os
 import shutil
-# import importlib
 from pathlib import Path
-from platformdirs import user_data_dir # user_config_dir
+from platformdirs import user_data_dir
 import pkg_resources
 import sqlite3
-# from configparser import ConfigParser
 
-
-
-# Textual imports
-# from textual import on, work
-# from textual.containers import Container, Horizontal
 from textual.widget import Widget
-# from textual.widgets import Static
-# from textual.reactive import reactive
-# from textual.widgets import (
-#     Input,
-# )
 
-# TextualDon imports
-# from .simplebutton import SimpleButton
-# from textualdon.messages import UpdateBannerMessage
 
 
 class SQLite(Widget):
-    """A simple SQLite database wrapper for TextualDon.   
+    """A simple SQLite database wrapper for Textual.   
     Cannot attach child widgets (blocked)."""
 
 

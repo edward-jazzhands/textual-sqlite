@@ -1,6 +1,5 @@
-"SQLite Widget"
+"SQLite Widget for Textual"
 
-# Standard library imports
 from __future__ import annotations
 from typing import Sequence, Any
 
@@ -14,44 +13,13 @@ import sqlite3
 from textual.widget import Widget
 
 
-
 class SQLite(Widget):
-    """A simple SQLite database wrapper for Textual.   
+    """A simple SQLite database wrapper for TextualDon.   
     Cannot attach child widgets (blocked)."""
 
 
     def __init__(self, *, db_path: str, **kwargs):
         """Create a new SQLite database wrapper.
-
-        Interface:
-        ``` 
-        insert_one(
-            table: str,
-            columns: list[str],
-            values: list[Any],
-            auto_commit: bool = True
-            )
-
-        delete_one(
-            table_name: str,
-            column_name: str,
-            value: Any
-            )
-
-        update_column(
-            table_name: str,
-            column_name: str,
-            new_value: Any,
-            condition_column: str,
-            condition_value: Any
-            )
-
-        fetchall(query: str, params: tuple = None)
-
-        fetchone(query: str, params: tuple = None)
-
-        close()
-        ```
 
         Args:
             db_path: The path to the SQLite database file.
@@ -78,11 +46,9 @@ class SQLite(Widget):
         if not user_db_path.exists():
             original_db = pkg_resources.resource_filename('textualdon', 'textualdon.db')
             shutil.copy2(original_db, user_db_path)
-            print(f"Initialized database at: {user_db_path}")
 
         return user_db_path
 
-    
     @contextmanager
     def _cursor(self):
         """Used internally by class"""
@@ -91,13 +57,49 @@ class SQLite(Widget):
             yield cursor
         finally:
             cursor.close()
+            
+
+    def create_table(self, table: str, columns: dict[str, str]):
+        """Create a new table in the database. Here for convenience but it's generally easier
+        to externally scaffold the database with a SQLite tool such as Harlequin.
+
+        EXAMPLE:
+        ```
+        table = "users"
+        columns = {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "name": "TEXT",
+            "age": "INTEGER",
+            "email": "TEXT"
+        }
+        db.create_table(table, columns)
+        ```
+        Raw SQL:   
+        `CREATE TABLE IF NOT EXISTS {table} ({', '.join( [f"{k} {v}" for k, v in columns.items()] ) }); `
+        
+        Args:
+            table (str): The name of the table to create.
+            columns (dict[str, str]): A dictionary of column names and types. """
+
+        columns_str = ', '.join([f"{k} {v}" for k, v in columns.items()])
+        query = f"CREATE TABLE IF NOT EXISTS {table} ({columns_str});"
+
+        try:
+            with self._cursor() as cursor:
+                cursor.execute(query)
+            self.connection.commit()
+        except sqlite3.DatabaseError as e:
+            self.connection.rollback()
+            raise e
+
+        self.log.debug(f"Successfully created table {table} with columns {columns}.")
 
     def insert_one(self, table: str, columns: list[str], values: Sequence[Any], auto_commit: bool = True):
         """Insert a single row into the database.   
         Using the auto_commit parameter, you can stage multiple inserts before committing them all at once.
         Simply let it go back to the default value of True to commit all inserts.
 
-        USAGE:
+        EXAMPLE:
         ```    
         table = "users"
         columns = ["name", "age", "email"]
@@ -105,7 +107,7 @@ class SQLite(Widget):
         db.insert_one(table, columns, values)
         ```
         Raw SQL:   
-        INSERT INTO {table} ({', '.join(columns)}) VALUES (?, ?, ?);
+        `INSERT INTO {table} ({', '.join(columns)}) VALUES (?, ?, ?);`
 
         Args:
             table (str): The name of the table to insert the row into.
@@ -124,17 +126,26 @@ class SQLite(Widget):
                     self.connection.commit()
         except sqlite3.DatabaseError as e:
             self.connection.rollback()
-            self.app.handle_exception(e)
+            raise e
+
+        self.log.debug(f"Successfully inserted a row into {table} with values {values}.")
+
 
     def delete_one(self, table_name: str, column_name: str, value: Any):
         """Delete a row from a database table.
 
-        USAGE:
+        EXAMPLE:
         ```
         delete_one('employees', 'id', 3)
         ```
-        Raw SQL:
-        DELETE FROM {table_name} WHERE {column_name} = ?; """
+        Raw SQL:   
+        `DELETE FROM {table_name} WHERE {column_name} = ?;` 
+        
+        Args:
+            table_name (str): The name of the table to delete from.
+            column_name (str): The column to use for the delete condition.
+            value (Any): The value to use for the delete condition.
+        """
          
         sql_delete_query = f"DELETE FROM {table_name} WHERE {column_name} = ?;"
 
@@ -142,12 +153,11 @@ class SQLite(Widget):
             with self._cursor() as cursor:
                 cursor.execute(sql_delete_query, (value,))
             self.connection.commit()
-            self.log.info(f"Successfully deleted {cursor.rowcount} row(s).")
-
         except sqlite3.DatabaseError as e:
             self.connection.rollback()
-            self.app.handle_exception(e)
+            raise e
 
+        self.log.debug(f"Successfully deleted {table_name} row where {column_name} is {value}.")
 
     def update_column(
             self,
@@ -159,12 +169,20 @@ class SQLite(Widget):
         ):
         """Update a column in a database table.
         
-        USAGE:
+        EXAMPLE:
         ```
         update_column('employees', 'salary', 75000, 'id', 3)
         ``` 
         Raw SQL:   
-        UPDATE {table_name} SET {column_name} = ? WHERE {condition_column} = ?; """
+        `UPDATE {table_name} SET {column_name} = ? WHERE {condition_column} = ?; `
+        
+        Args:
+            table_name (str): The name of the table to update.
+            column_name (str): The name of the column to update.
+            new_value (Any): The new value to set in the column.
+            condition_column (str): The column to use for the update condition.
+            condition_value (Any): The value to use for the update condition.
+        """
         
         sql_update_query = f"UPDATE {table_name} SET {column_name} = ? WHERE {condition_column} = ?;"
 
@@ -172,17 +190,19 @@ class SQLite(Widget):
             with self._cursor() as cursor:
                 cursor.execute(sql_update_query, (new_value, condition_value))
             self.connection.commit()
-            self.log.info(f"Successfully updated {cursor.rowcount} row(s).")
 
         except sqlite3.DatabaseError as e:
             self.connection.rollback()
-            self.app.handle_exception(e)
+            raise e
+
+        self.log.debug(f"Successfully updated {table_name} column {column_name} to "
+                       f"{new_value} where {condition_column} is {condition_value}.")
 
 
     def fetchall(self, query: str, params: Sequence = None) -> list[tuple]:
         """This method runs a SQL query and retrieves all rows that match the query criteria.
         
-        USAGE:
+        EXAMPLE:
         ```
         query = "SELECT * FROM users WHERE name = ?"
         params = ("Alice")
@@ -203,13 +223,13 @@ class SQLite(Widget):
         try:
             pass
         except Exception as e:
-            self.app.handle_exception(e)
+            raise e
     
     def fetchone(self, query: str, params: Sequence = None) -> tuple:
         """This method is similar to fetchall, but it only retrieves a single row
         from the database, even if multiple rows meet the query criteria.
         
-        USAGE:
+        EXAMPLE:
         ```
         query = "SELECT * FROM users WHERE name = ?"
         params = ("Alice")

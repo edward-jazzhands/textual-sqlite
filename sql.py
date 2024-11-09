@@ -43,11 +43,11 @@ class SQLite(Widget):
         """
 
         try:
-            files(pkg_name)             # validate the package has resources
+            files(pkg_name)             # validate the package
         except ModuleNotFoundError:
-            raise ModuleNotFoundError(f"Package {pkg_name} not found. Please install it first.")
+            raise ModuleNotFoundError(f"Package {pkg_name} not found")
         except FileNotFoundError:
-            raise FileNotFoundError(f"Package {pkg_name} does not contain any resources.")
+            raise FileNotFoundError(f"Package {pkg_name} not found")
 
         self.pkg_name = pkg_name
         self.db_filename = db_filename if db_filename else f"{pkg_name}.db"

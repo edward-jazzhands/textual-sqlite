@@ -7,7 +7,8 @@ from contextlib import contextmanager
 import shutil
 from pathlib import Path
 from platformdirs import user_data_dir
-import pkg_resources
+from importlib.resources import files
+from importlib import import_module
 import sqlite3
 
 from textual.widget import Widget
@@ -18,17 +19,40 @@ class SQLite(Widget):
     Cannot attach child widgets (blocked)."""
 
 
-    def __init__(self, *, db_path: str, **kwargs):
-        """Create a new SQLite database wrapper.
+    def __init__(self, pkg_name: str, db_filename: str = None, **kwargs):
+        """Create a new SQLite database wrapper.   
+        Must pass in the name of the package that contains the database scaffold.   
+        Optionally pass in the name of the database file. If not provided, the name will be `<pkg_name>.db`.
+        
+        EXAMPLE:
+        ```
+        db = SQLite("my_package")
+        ```
+        This would assume that my_package has a file called `my_package.db` in its resources directory.
 
         Args:
-            db_path: The path to the SQLite database file.
+            pkg_name: The name of the package that contains the database file.
+            db_filename: The name of the database file. If None, name is `<pkg_name>.db`.
             name: The name of the widget.
             id: The ID of the widget in the DOM.
             classes: The CSS classes for the widget.
             disabled: Whether the widget is disabled or not.
+
+        Raises:
+            ModuleNotFoundError: If the package name is not found.
+            FileNotFoundError: If the package does not contain the expected resources.
         """
 
+        try:
+            import_module(pkg_name)     # validate the package name
+            files(pkg_name)             # validate the package has resources
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError(f"Package {pkg_name} not found. Please install it first.")
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Package {pkg_name} does not contain the expected resources.")
+
+        self.pkg_name = pkg_name
+        self.db_filename = db_filename if db_filename else f"{pkg_name}.db"
         self.user_db_path = self.get_user_db()
         self.connection = sqlite3.connect(self.user_db_path)
 
@@ -40,11 +64,11 @@ class SQLite(Widget):
         First time its run it will copy the database file to the user's data directory"""
 
         # platformdirs gives us platform specific directories
-        data_dir = Path(user_data_dir(appname="textualdon", ensure_exists=True))
-        user_db_path = data_dir / "textualdon.db" 
+        data_dir = Path(user_data_dir(appname=self.pkg_name, ensure_exists=True))
+        user_db_path = data_dir / self.db_filename 
 
         if not user_db_path.exists():
-            original_db = pkg_resources.resource_filename('textualdon', 'textualdon.db')
+            original_db = files(self.pkg_name).joinpath(self.db_filename)
             shutil.copy2(original_db, user_db_path)
 
         return user_db_path

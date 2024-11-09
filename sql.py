@@ -1,16 +1,15 @@
 "SQLite Widget for Textual"
 
-from __future__ import annotations
+# stdlib
 from typing import Sequence, Any
-
 from contextlib import contextmanager
 import shutil
 from pathlib import Path
-from platformdirs import user_data_dir
 from importlib.resources import files
-from importlib import import_module
 import sqlite3
 
+# 3rd party
+from platformdirs import user_data_dir
 from textual.widget import Widget
 
 
@@ -44,12 +43,11 @@ class SQLite(Widget):
         """
 
         try:
-            import_module(pkg_name)     # validate the package name
             files(pkg_name)             # validate the package has resources
         except ModuleNotFoundError:
             raise ModuleNotFoundError(f"Package {pkg_name} not found. Please install it first.")
         except FileNotFoundError:
-            raise FileNotFoundError(f"Package {pkg_name} does not contain the expected resources.")
+            raise FileNotFoundError(f"Package {pkg_name} does not contain any resources.")
 
         self.pkg_name = pkg_name
         self.db_filename = db_filename if db_filename else f"{pkg_name}.db"

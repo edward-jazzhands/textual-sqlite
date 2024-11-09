@@ -14,7 +14,7 @@ from textual.widget import Widget
 
 
 class SQLite(Widget):
-    """A simple SQLite database wrapper for TextualDon.   
+    """A simple SQLite database wrapper for Textual.   
     Cannot attach child widgets (blocked)."""
 
 

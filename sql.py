@@ -3,10 +3,9 @@
 # stdlib
 from typing import Sequence, Any
 from contextlib import contextmanager
-import shutil
 from pathlib import Path
-from importlib.resources import files
 import sqlite3
+from importlib import resources
 
 # 3rd party
 from platformdirs import user_data_dir
@@ -14,62 +13,67 @@ from textual.widget import Widget
 
 
 class SQLite(Widget):
-    """A simple SQLite database wrapper for Textual.   
-    Cannot attach child widgets (blocked)."""
+    """A simple SQLite database wrapper for TextualDon.   
+    Cannot attach child widgets (blocked).
+    
+    See __init__ for usage."""
 
 
-    def __init__(self, pkg_name: str, db_filename: str = None, **kwargs):
-        """Create a new SQLite database wrapper.   
-        Must pass in the name of the package that contains the database scaffold.   
-        Optionally pass in the name of the database file. If not provided, the name will be `<pkg_name>.db`.
-        
-        EXAMPLE:
-        ```
-        db = SQLite("my_package")
-        ```
-        This would assume that my_package has a file called `my_package.db` in its resources directory.
+    def __init__(
+            self,
+            app_name: str,
+            sql_script: str,
+            db_filename: str = None,
+            **kwargs):
+        """Create a new SQLite database wrapper.    
+        Must pass in the name of the package that is using this widget (to locate your SQL script).   
+        This same name will be used to create a directory in the user's data directory to store the database file.
 
         Args:
-            pkg_name: The name of the package that contains the database file.
-            db_filename: The name of the database file. If None, name is `<pkg_name>.db`.
+            app_name: The name of the package that is using this widget.
+            sql_script: The name of the SQL script file to use for setting up the database tables and schema.   
+                Path is relative to the main package directory.
+            db_filename: The name the database file will use. If None, name will be `<app_name>.db`.
             name: The name of the widget.
             id: The ID of the widget in the DOM.
             classes: The CSS classes for the widget.
             disabled: Whether the widget is disabled or not.
 
-        Raises:
-            ModuleNotFoundError: If the package name is not found.
-            FileNotFoundError: If the package does not contain the expected resources.
+        EXAMPLE:
+        ```
+        db = SQLite("my_package", "SQL/create_tables.sql")
+        ```
+        This would assume that my_package has a file called `create_tables.sql` in its `SQL` directory.   
+        The widget will only run your SQL script the first time the database is created.
         """
-
-        try:
-            files(pkg_name)             # validate the package
-        except ModuleNotFoundError:
-            raise ModuleNotFoundError(f"Package {pkg_name} not found")
-        except FileNotFoundError:
-            raise FileNotFoundError(f"Package {pkg_name} not found")
-
-        self.pkg_name = pkg_name
-        self.db_filename = db_filename if db_filename else f"{pkg_name}.db"
-        self.user_db_path = self.get_user_db()
-        self.connection = sqlite3.connect(self.user_db_path)
 
         super().__init__(**kwargs)
 
+        self.app_name = app_name
+        self.sql_script = sql_script
+        self.db_filename = db_filename or f"{self.app_name}.db"
+
+        self.user_db_path = self.get_user_db()
+        if not self.user_db_path.exists():
+            self.connection = sqlite3.connect(self.user_db_path)
+            self.initialize_db()
+        else:
+            self.connection = sqlite3.connect(self.user_db_path)
 
     def get_user_db(self) -> Path:
-        """Used internally by class
-        First time its run it will copy the database file to the user's data directory"""
 
         # platformdirs gives us platform specific directories
-        data_dir = Path(user_data_dir(appname=self.pkg_name, ensure_exists=True))
-        user_db_path = data_dir / self.db_filename 
-
-        if not user_db_path.exists():
-            original_db = files(self.pkg_name).joinpath(self.db_filename)
-            shutil.copy2(original_db, user_db_path)
-
+        data_dir = Path(user_data_dir(appname=self.app_name, ensure_exists=True))
+        user_db_path = data_dir / self.db_filename
         return user_db_path
+    
+    def initialize_db(self):
+
+        sql_file_path = Path(resources.files(self.app_name) / self.sql_script)
+        print(f"SQL file location: \n{sql_file_path} \n")
+        with open(sql_file_path, 'r') as f:
+            script = f.read()
+            self.execute_script(script)
 
     @contextmanager
     def _cursor(self):
@@ -79,11 +83,30 @@ class SQLite(Widget):
             yield cursor
         finally:
             cursor.close()
+
+    def execute_script(self, script: str):
+        """Execute a SQL script on the database.
+
+        EXAMPLE:
+        ```
+        script = "create_table.sql"
+        db.execute_script(script)
+        ``` """
+
+        try:
+            with self._cursor() as cursor:
+                cursor.executescript(script)
+            self.connection.commit()
+        except sqlite3.DatabaseError as e:
+            self.connection.rollback()
+            raise e
+
+        print("Successfully executed script on database.")
             
 
     def create_table(self, table: str, columns: dict[str, str]):
-        """Create a new table in the database. Here for convenience but it's generally easier
-        to externally scaffold the database with a SQLite tool such as Harlequin.
+        """Create a new table in the database. Here for convenience but it's generally recommended
+        to use the SQL script to create tables.
 
         EXAMPLE:
         ```
